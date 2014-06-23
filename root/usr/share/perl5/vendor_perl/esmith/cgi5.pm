@@ -128,8 +128,8 @@ sub genHeader ($$$$$)
 			   $q->h5 ('Warning: you have not yet changed the default system password.'));
 	}
 
-	my $TelnetAccess = db_get_prop($confref, 'telnet', 'access');
-        my $TelnetMode = db_get_prop($confref, 'telnet', 'status');
+	my $TelnetAccess = db_get_prop($confref, 'telnet', 'access') ||'';
+        my $TelnetMode = db_get_prop($confref, 'telnet', 'status') || '';
 	if ($TelnetAccess eq 'public' && $TelnetMode eq 'enabled')
 	{
 	    print $q->div ({-STYLE => 'color: #FF3E00'},
