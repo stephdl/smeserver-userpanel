@@ -1,0 +1,259 @@
+#!/usr/bin/perl -wT
+
+#----------------------------------------------------------------------
+# user manager functions: noframes
+#
+# Copyright (c) 2001 Daniel van Raay <danielvr@caa.org.au>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307  USA
+#----------------------------------------------------------------------
+
+package esmith;
+
+use strict;
+use CGI ':all';
+use CGI::Carp qw(fatalsToBrowser);
+
+use esmith::cgi;
+use esmith::config;
+use esmith::util;
+use esmith::db;
+
+sub showNavigation ($);
+sub byweight;
+
+BEGIN
+{
+    # Clear PATH and related environment variables so that calls to
+    # external programs do not cause results to be tainted. See
+    # "perlsec" manual page for details.
+
+    $ENV {'PATH'} = '';
+    $ENV {'SHELL'} = '/bin/bash';
+    delete $ENV {'ENV'};
+}
+
+esmith::util::setRealToEffective ();
+
+$CGI::POST_MAX=1024 * 100;  # max 100K posts
+$CGI::DISABLE_UPLOADS = 1;  # no uploads
+
+my %conf;
+tie %conf, 'esmith::config';
+
+my %accounts;
+tie %accounts, 'esmith::config', '/home/e-smith/db/accounts';
+
+my $q = new CGI;
+
+showNavigation ($q);
+exit (0);
+
+
+#------------------------------------------------------------
+# subroutine to display navigation bar
+#------------------------------------------------------------
+
+sub showNavigation ($)
+{
+    my $q = shift;
+
+    esmith::cgi::genNoframesHeader ($q);
+
+    my $acctName = $ENV{'REMOTE_USER'};
+    my $availablePanels = db_get_prop(\%accounts, $acctName, 'AdminPanels');
+    my $globalPanels = db_get_prop(\%accounts, 'globalUP', 'AdminPanels');
+
+    my @adminpanels;
+    if ( defined ($availablePanels) && defined ($globalPanels) )
+    {
+        @adminpanels = ((split (/,/, $availablePanels, -1)),(split (/,/, $globalPanels, -1)));
+    }
+    elsif ( defined ($globalPanels) )
+    {
+        @adminpanels = split (/,/, $globalPanels, -1);
+    }
+    elsif ( defined ($availablePanels) )
+    {
+        @adminpanels = split (/,/, $availablePanels, -1);
+    }
+
+    # Use this variable throughout to keep track of files
+    # list of just the files
+    my @files = ();
+    my %files_hash = ();
+
+    #-----------------------------------------------------
+    # Determine the directory where the functions are kept
+    # match available panels with delegated panels to this user
+    #-----------------------------------------------------
+
+    my $cgidir = '/etc/e-smith/web/panels/user/cgi-bin/';
+
+    if (opendir (DIR, $cgidir))
+    {
+        @files = grep (!/^(\..*|userpanel-navigation|userpanel-noframes|userpanel-initial|pleasewait)$/,
+        readdir (DIR));
+        closedir (DIR);
+    }
+    else
+    {
+        warn "Can't open directory $cgidir\n";
+    }
+
+    foreach my $file (@files)
+    {
+        foreach my $adminpanel (@adminpanels)
+        {
+            if ( $file eq $adminpanel )
+            {
+                $files_hash{$file} = $cgidir;
+            }
+        }
+    }
+
+    #--------------------------------------------------
+    # For each script, extract the description and category
+    # information. Build up an associative array mapping headings
+    # to heading structures. Each heading structure contains the
+    # total weight for the heading, the number of times the heading
+    # has been encountered, and another associative array mapping
+    # descriptions to description structures. Each description
+    # structure contains the filename of the particular cgi script
+    # and a weight.
+    #--------------------------------------------------
+
+    my %nav = ();
+
+    foreach my $file (keys %files_hash)
+    {
+        #--------------------------------------------------
+        # extract heading, description and weight information
+        # from CGI script
+        #--------------------------------------------------
+        my $heading = "Unknown";
+        my $headingWeight = 0;
+
+        my $description = "Unknown";
+        my $descriptionWeight = 0;
+
+          unless (open (RD, "$files_hash{$file}/$file"))
+          {
+              warn "Can't open file $files_hash{$file}/$file: $!\n";
+              next;
+          }
+
+        while (<RD>)
+        {
+        if (/^\s*#\s*heading\s*:\s*(.+?)\s*$/)
+        {
+                $heading = $1;
+        }
+
+        if (/^\s*#\s*description\s*:\s*(.+?)\s*$/)
+        {
+            $description = $1;
+        }
+
+        if (/^\s*#\s*navigation\s*:\s*(\d+?)\s+(\d+?)\s*$/)
+        {
+            $headingWeight = $1;
+            $descriptionWeight = $2;
+        }
+            last if ($heading ne "Unknown" && $headingWeight && $description ne "Unknown" && $descriptionWeight);
+        }
+        close RD;
+
+        #--------------------------------------------------
+        # add heading, description and weight information to data structure
+        #--------------------------------------------------
+
+        unless (exists $nav {$heading})
+        {
+            $nav {$heading} = { COUNT => 0, WEIGHT => 0, DESCRIPTIONS => [] };
+        }
+
+        $nav {$heading} {'COUNT'} ++;
+        $nav {$heading} {'WEIGHT'} += $headingWeight;
+
+        # Check for manager panel, and assign the appropriate
+        # cgi-bin prefix for the links.
+        # Grab the last 2 directories by splitting for '/'s and
+        # then concatenating the last 2
+        # probably a better way, but I don't know it.
+        my @filename = split /\//, $files_hash{$file};
+        my $path = "/user-manager/$filename[scalar @filename - 1]";
+
+        push @{ $nav {$heading} {'DESCRIPTIONS'} },
+                 { DESCRIPTION => $description,
+                   WEIGHT => $descriptionWeight,
+                   FILENAME => "$path/$file",
+                   CGIPATH => $path
+                 };
+    }
+
+    #--------------------------------------------------
+    # generate list of headings sorted by average weight
+    #--------------------------------------------------
+
+    my @unsortedheadings = keys %nav;
+
+    my $h;
+    local @esmith::weights = ();
+    foreach $h (@unsortedheadings)
+    {
+        push (@esmith::weights, ($nav {$h} {'WEIGHT'} / $nav {$h} {'COUNT'}));
+    }
+
+    my @sortedheadings = @unsortedheadings [sort byweight $[..$#unsortedheadings];
+
+    foreach $h (@sortedheadings)
+    {
+         print $q->h2 ($h);
+
+         #--------------------------------------------------
+         # generate list of descriptions sorted by weight
+         #--------------------------------------------------
+
+         my @unsorteddescriptions = @{ $nav {$h} {'DESCRIPTIONS'} };
+
+         my $d;
+         @esmith::weights = ();
+         foreach $d (@unsorteddescriptions)
+         {
+             push (@esmith::weights, $d->{'WEIGHT'});
+         }
+
+         my @indices = sort byweight $[..$#unsorteddescriptions;
+
+         print "<ul>\n";
+
+         my $i;
+         foreach $i (@indices)
+         {
+             my $href = $unsorteddescriptions [$i]->{'FILENAME'};
+             print $q->li ($q->a ({href => $href}, $unsorteddescriptions [$i]->{'DESCRIPTION'}));
+
+         }
+         print "</ul>\n";
+    }
+
+    esmith::cgi::genNavigationFooter ($q);
+}
+
+sub byweight
+{
+    $esmith::weights [$a] <=> $esmith::weights [$b];
+}

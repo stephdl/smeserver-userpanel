@@ -1,0 +1,368 @@
+#!/usr/bin/perl -wT
+
+#----------------------------------------------------------------------
+# e-smith manager functions: navigation
+#
+# copyright (C) 2002 Mitel Networks Corporation
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307  USA
+#
+# Technical support for this program is available from Mitel Networks
+# Please visit our web site www.e-smith.com for details.
+#----------------------------------------------------------------------
+package esmith;
+
+use strict;
+use CGI ':no_xhtml', ':all';
+use CGI::Carp qw(fatalsToBrowser);
+
+use esmith::cgi;
+use esmith::config;
+use esmith::ConfigDB;
+use esmith::util;
+use esmith::I18N;
+use esmith::db;
+
+sub determineGroup;
+sub showNavigation ($);
+sub byweight;
+
+BEGIN
+{
+    # Clear PATH and related environment variables so that calls to
+    # external programs do not cause results to be tainted. See
+    # "perlsec" manual page for details.
+
+    $ENV {'PATH'} = '';
+    $ENV {'SHELL'} = '/bin/bash';
+    delete $ENV {'ENV'};
+}
+
+esmith::util::setRealToEffective ();
+
+$CGI::POST_MAX=1024 * 100;  # max 100K posts
+$CGI::DISABLE_UPLOADS = 1;  # no uploads
+
+# Use the one script for navigation and noframes
+my $NO_FRAMES = ($0 =~ /noframes/);
+
+my %conf;
+tie %conf, 'esmith::config';
+
+my %accounts;
+tie %accounts, 'esmith::config', '/home/e-smith/db/accounts';
+
+my $q = new CGI;
+
+showNavigation ($q);
+logmeout($q);
+
+exit (0);
+
+#------------------------------------------------------
+# subroutine to print logout
+#------------------------------------------------------
+sub logmeout ($)
+{
+my $user = $ENV{'REMOTE_USER'};
+
+print <<EOF;
+<table width="100%" border="0" cellspacing="0" cellpadding="0">
+ <tr>
+   <td align=left nowrap class="infobar">
+     <img src="/server-common/spacer.gif" height="14" width="1" align="left">
+   </td>
+    <td align=left nowrap class="infobar">
+ $user
+ </td>
+</tr>
+ <tr>
+    <td align=left nowrap class="infobar">
+     <img src="/server-common/spacer.gif" height="14" width="1" align="left">
+   </td>
+        <td align=left nowrap class="infobar">
+          <a target="_parent" href="/server-common/cgi-bin/logout-user"><b>Logout</b></a></td>
+
+  </tr>
+</table>
+EOF
+
+
+}
+
+#------------------------------------------------------
+# subroutine to determine which group a user belongs to
+#------------------------------------------------------
+
+sub determineGroup
+{
+	my ($user) = shift;
+
+	# Group file for authentication
+	my $group_file = '/etc/group';
+	open ( GF, $group_file )
+	    or die "Cannot open group file: $group_file: $!\n";
+
+	# list of groups this user belongs to
+	my @groupList;
+	while (<GF>)
+	{
+		if (/[:,]$user\b/)
+		{
+			my ($groupName, undef) = split(/:/);
+			push @groupList, $groupName;
+		}
+	}
+	close GF;
+	return @groupList;
+}
+
+#------------------------------------------------------------
+# subroutine to display navigation bar
+#------------------------------------------------------------
+
+sub showNavigation ($)
+{
+    my $q = shift;
+
+    my $acctName = $ENV{'REMOTE_USER'};
+    my @adminpanels;
+
+    my $availablePanels = db_get_prop(\%accounts, $acctName, 'AdminPanels') || '';
+    push (@adminpanels, split (/,/, $availablePanels, -1));
+
+    my $globalPanels = db_get_prop(\%accounts, 'globalUP', 'AdminPanels') || '';
+    push (@adminpanels, split (/,/, $globalPanels, -1));
+
+    foreach (determineGroup($acctName), 'shared')
+    {
+        my $gpanel = db_get_prop(\%accounts, $_, 'AdminPanels') || '';
+        push (@adminpanels, split (/,/, $gpanel, -1));
+    }
+
+    # Use this variable throughout to keep track of files
+    # list of just the files
+    my $c = "1";
+    my @files = ();
+    my %files_hash = ();
+
+    #-----------------------------------------------------
+    # Determine the directory where the functions are kept
+    #-----------------------------------------------------
+
+    my $navigation_ignore =
+	"(\.\.?|navigation|noframes|online-manual|(internal|pleasewait)(-.*)?)";
+
+    my $cgidir = '/etc/e-smith/web/panels/user/cgi-bin/';
+
+    if (opendir (DIR, $cgidir))
+    {
+        @files = grep (!/^(\..*|userpanel-navigation|userpanel-noframes|userpanel-initial|pleasewait)$/,
+        readdir (DIR));
+        closedir (DIR);
+    }
+    else
+    {
+        warn "Can't open directory $cgidir\n";
+    }
+
+    foreach my $file (@files)
+    {
+        foreach my $adminpanel (@adminpanels)
+        {
+            if ( $file eq $adminpanel )
+            {
+                $files_hash{$file} = $cgidir;
+            }
+        }
+    }
+
+    #--------------------------------------------------
+    # For each script, extract the description and category
+    # information. Build up an associative array mapping headings
+    # to heading structures. Each heading structure contains the
+    # total weight for the heading, the number of times the heading
+    # has been encountered, and another associative array mapping
+    # descriptions to description structures. Each description
+    # structure contains the filename of the particular cgi script
+    # and a weight.
+    #--------------------------------------------------
+    my %nav = ();
+
+    use constant NAVIGATIONDIR => '/home/e-smith/db/navigation';
+    use constant WEBFUNCTIONS  => '/etc/e-smith/web/functions';
+
+    my $i18n = new esmith::I18N;
+
+    my $language = $i18n->preferredLanguage( $ENV{HTTP_ACCEPT_LANGUAGE} );
+
+    my $navinfo = NAVIGATIONDIR . "/navigation.$language";
+
+    my $navdb = esmith::ConfigDB->open_ro( $navinfo ) or
+	die "Couldn't open $navinfo\n";
+
+    # Check the navdb for anything with a UrlPath, which means that it doesn't
+    # have a cgi file to be picked up by the above code. Ideally, only pages
+    # that exist should be in the db, but that's not the case. Anything
+    # without a cgi file will have to remove themselves on uninstall from the
+    # navigation dbs.
+    foreach my $rec ($navdb->get_all)
+    {
+	if ($rec->prop('UrlPath'))
+	{
+	    $files_hash{$rec->{key}} = $cgidir;
+	}
+    }
+
+    foreach my $file (keys %files_hash)
+    {
+	my $heading = 'Unknown';
+	my $description = $file;
+	my $headingWeight = 99999;
+	my $descriptionWeight = 99999;
+	my $urlpath = '';
+
+	my $rec = $navdb->get($file);
+
+	if (defined $rec)
+	{
+	    $heading = $rec->prop('Heading');
+	    $description = $rec->prop('Description');
+	    $headingWeight = $rec->prop('HeadingWeight');
+	    $descriptionWeight = $rec->prop('DescriptionWeight');
+	    $urlpath = $rec->prop('UrlPath') || '';
+	}
+
+	#--------------------------------------------------
+	# add heading, description and weight information to data structure
+	#--------------------------------------------------
+
+	unless (exists $nav {$heading})
+	{
+	    $nav {$heading} = { COUNT => 0, WEIGHT => 0, DESCRIPTIONS => [] };
+	}
+
+	$nav {$heading} {'COUNT'} ++;
+	$nav {$heading} {'WEIGHT'} += $headingWeight;
+
+	my @filename = split /\//, $files_hash{$file};
+        my $path = "/user/$filename[scalar @filename - 1]";
+
+	push @{ $nav {$heading} {'DESCRIPTIONS'} },
+		{ DESCRIPTION => $description,
+		  WEIGHT => $descriptionWeight,
+		  FILENAME => $urlpath ? $urlpath : "$path/$file",
+		  CGIPATH => $path
+		};
+    }
+
+    #--------------------------------------------------
+    # generate list of headings sorted by average weight
+    #--------------------------------------------------
+
+    my @unsortedheadings = keys %nav;
+
+    my $h;
+    local @esmith::weights = ();
+    foreach $h (@unsortedheadings)
+    {
+        push (@esmith::weights, ($nav {$h} {'WEIGHT'} / $nav {$h} {'COUNT'}));
+    }
+
+    my @sortedheadings = @unsortedheadings [sort byweight $[..$#unsortedheadings];
+
+    if ( $NO_FRAMES )
+    {
+	esmith::cgi::genNoframesHeader ($q);
+    }
+    else
+    {
+        esmith::cgi::genNavigationHeader ($q, $#sortedheadings);
+	print "\n<TABLE BORDER=\"0\" CELLSPACING=\"0\" CELLPADDING=\"0\">\n";
+    }
+
+    foreach $h (@sortedheadings)
+    {
+        if ( $NO_FRAMES )
+	{
+	    print $q->h2 ($h);
+	}
+	else
+	{
+	    print "\n", $q->Tr ($q->td({class => "section"},$q->span({class => "section"}, $h)));
+	}
+
+	#--------------------------------------------------
+	# generate list of descriptions sorted by weight
+	#--------------------------------------------------
+
+	my @unsorteddescriptions = @{ $nav {$h} {'DESCRIPTIONS'} };
+
+	my $d;
+	@esmith::weights = ();
+	foreach $d (@unsorteddescriptions)
+	{
+   	   push (@esmith::weights, $d->{'WEIGHT'});
+	}
+
+	my @indices = sort byweight $[..$#unsorteddescriptions;
+
+        print "<ul>\n" if ( $NO_FRAMES );
+
+	my $i;
+	foreach $i (@indices)
+	{
+	    if ( $NO_FRAMES )
+	    {
+		 my $href = "/user" .
+		 $unsorteddescriptions [$i]->{'FILENAME'};
+		 print $q->li ($q->a ({href => "$href?noframes=1"}, $unsorteddescriptions [$i]->{'DESCRIPTION'}));
+	    }
+	    else
+  	    {
+                 my $_class_root_base = "item";
+                 my $_class_root_warn   = "warn";
+                 my $_class = "$_class_root_base";
+                 my $_class_selected = "$_class_root_base"."-current";
+                 my $_class2 = "$_class_root_warn";
+                 my $_class2_selected = "$_class_root_warn"."-current";
+
+                 my $href =
+		    $unsorteddescriptions [$i]->{'FILENAME'};
+                    print "\n",$q->Tr($q->td ({-class => "menu-cell"},
+				     $q->a ({-id => "sme$c",
+                                            -class => "$_class",
+                                            -onClick => "swapClass(0,'none','$_class_selected','$_class','a');swapClass(0,'none','$_class2_selected','$_class2','a');swapClass(0,'sme$c','$_class_selected','$_class','a')",
+                                            href => $href,
+                                            target => 'main'},
+                                            $unsorteddescriptions [$i]->{'DESCRIPTION'})));
+             }
+             $c++;
+
+	}
+        print "</ul>\n" if ($NO_FRAMES);
+    }
+
+    unless ( $NO_FRAMES )
+    {
+	print "\n</TABLE>\n";
+        esmith::cgi::genNavigationFooter ($q);
+    }
+}
+
+sub byweight
+{
+    $esmith::weights [$a] <=> $esmith::weights [$b];
+}

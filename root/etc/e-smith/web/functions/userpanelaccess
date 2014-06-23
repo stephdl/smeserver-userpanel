@@ -1,0 +1,411 @@
+#!/usr/bin/perl -wT
+
+#----------------------------------------------------------------------
+# heading     : Security
+# description : User Panel Access
+# navigation  : 1000 1300
+#
+# Copyright (c) 2001 Daniel van Raay <danielvr@caa.org.au>
+# Modified (c) 2002 Stephen Noble <stephen@dungog.net>
+# Modified (c) 2002 Shad L. Lords <slords@mail.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307  USA
+#----------------------------------------------------------------------
+
+package esmith;
+
+use strict;
+use CGI ':all';
+use CGI::Carp qw(fatalsToBrowser);
+
+use esmith::cgi;
+use esmith::config;
+use esmith::util;
+use esmith::db;
+use esmith::event;
+
+sub showInitial ($$);
+sub genPanels ($$);
+sub modifyAccess ($);
+sub performModifyAccess ($);
+
+BEGIN
+{
+    # Clear PATH and related environment variables so that calls to
+    # external programs do not cause results to be tainted. See
+    # "perlsec" manual page for details.
+
+    $ENV {'PATH'} = '';
+    $ENV {'SHELL'} = '/bin/bash';
+    delete $ENV {'ENV'};
+}
+
+esmith::util::setRealToEffective ();
+
+$CGI::POST_MAX=1024 * 100;  # max 100K posts
+$CGI::DISABLE_UPLOADS = 1;  # no uploads
+
+my %conf;
+tie %conf, 'esmith::config';
+
+my %accounts;
+tie %accounts, 'esmith::config', '/home/e-smith/db/accounts';
+
+#------------------------------------------------------------
+# examine state parameter and display the appropriate form
+#------------------------------------------------------------
+
+my $q = new CGI;
+
+if (! grep (/^state$/, $q->param))
+{
+    showInitial ($q, '');
+}
+
+elsif ($q->param ('state') eq "modifyAccess")
+{
+    modifyAccess ($q);
+}
+
+elsif ($q->param ('state') eq "performModifyAccess")
+{
+    performModifyAccess ($q);
+}
+
+else
+{
+    esmith::cgi::genStateError ($q, \%conf);
+}
+
+exit (0);
+
+#------------------------------------------------------------
+# subroutine to display initial form
+#------------------------------------------------------------
+
+sub showInitial ($$)
+{
+    my ($q, $msg) = @_;
+
+    if ($msg eq '')
+    {
+    esmith::cgi::genHeaderNonCacheable
+        ($q, \%conf, 'Change access to server-manager panels for user accounts');
+    }
+    else
+    {
+    esmith::cgi::genHeaderNonCacheable
+        ($q, \%conf, 'Operation status report');
+
+    print $q->p ($msg);
+    print $q->hr;
+    }
+
+    my @userAccounts = ('admin');
+
+    foreach (sort keys %accounts)
+    {
+      push (@userAccounts, $_) if (db_get_type(\%accounts, $_) eq "user");
+    }
+
+    foreach (sort keys %accounts)
+    {
+      push (@userAccounts, $_) if (db_get_type(\%accounts, $_) eq "group");
+    }
+
+    unless (scalar @userAccounts)
+    {
+      print $q->p ($q->b ('There are no user accounts in the system.'));
+    }
+    else
+    {
+      my $description = <<END_TEXT;
+You can modify individual users access to the server-manager
+panels below by clicking on the link next the account. You can assign
+panels to the members of a group with their link. Users or Groups
+in red have some form of extra access. You can globally assign
+a panel by editing the global account
+END_TEXT
+
+      print $q->p ($description);
+
+      print $q->p ($q->b ('Current List of User Accounts'));
+
+      print "<table border=1 cellspacing=1 cellpadding=4>";
+
+      print $q->Tr (esmith::cgi::genSmallCell ($q, $q->b ('Account')),
+                esmith::cgi::genSmallCell ($q, $q->b ('Name/Description')),
+                $q->td ('&nbsp;'));
+
+      my $user;
+
+      foreach $user (@userAccounts)
+      {
+          my $name = '';
+          if (db_get_type(\%accounts, $user) eq "group")
+          {
+              $name =db_get_prop(\%accounts, $user, "Description");
+          }
+          else
+          {
+              $name =db_get_prop(\%accounts, $user, "FirstName")." ". db_get_prop(\%accounts, $user, "LastName");
+          }
+
+          my $AdminPanels = db_get_prop(\%accounts, $user, "AdminPanels");
+          $AdminPanels = '' if ! defined ($AdminPanels);
+
+          if ( ! $AdminPanels )
+          {
+          print $q->Tr (esmith::cgi::genSmallCell ($q, $user),
+                    esmith::cgi::genSmallCell ($q, $name),
+                    esmith::cgi::genSmallCell ($q,
+                  $q->a ({href => $q->url (-absolute => 1)
+                           . "?state=modifyAccess&acct="
+                           . $user}, 'Change Access...')));
+
+          }
+          else
+          {
+          print $q->Tr (esmith::cgi::genSmallRedCell ($q, $user),
+                    esmith::cgi::genSmallRedCell ($q, $name),
+                    esmith::cgi::genSmallCell ($q,
+                  $q->a ({href => $q->url (-absolute => 1)
+                           . "?state=modifyAccess&acct="
+                           . $user}, 'Change Access...')));
+
+          }
+
+      }
+
+      #global setting
+      if ( ! db_get( \%accounts, 'globalUP') )
+      {
+          db_set(\%accounts, 'globalUP', 'userpanelglobal', { FirstName => 'global user', LastName => 'panel access' });
+      }
+
+      my $AdminPanels = db_get_prop(\%accounts, 'globalUP', "AdminPanels");
+      $AdminPanels = '' if ! defined ($AdminPanels);
+
+      if ( ! $AdminPanels )
+      {
+        print $q->Tr (esmith::cgi::genSmallCell ($q, 'Global'),
+                esmith::cgi::genSmallCell ($q, 'every user'),
+                esmith::cgi::genSmallCell ($q,
+              $q->a ({href => $q->url (-absolute => 1)
+                       . "?state=modifyAccess&acct="
+                       . 'globalUP'}, 'Change Access...')));
+
+      }
+      else
+      {
+        print $q->Tr (esmith::cgi::genSmallRedCell ($q, 'Global'),
+                esmith::cgi::genSmallRedCell ($q, 'every user'),
+                esmith::cgi::genSmallCell ($q,
+              $q->a ({href => $q->url (-absolute => 1)
+                       . "?state=modifyAccess&acct="
+                       . 'globalUP'}, 'Change Access...')));
+
+      }
+
+      print '</table>';
+    }
+
+    esmith::cgi::genFooter ($q);
+}
+
+sub genPanels ($$)
+{
+    my ($q, $user) = @_;
+
+    my %panelshash =  ();
+    my @selected =    ();
+    my @globalselected =    ();
+
+    my @panels;
+    opendir (DIR, "/etc/e-smith/web/functions")
+        || die "Can't open /etc/e-smith/web/functions directory.\n";
+    push (@panels, sort (grep (!/^(\.|userpanel-initial|userpanel-navigation|userpanel-noframes|pleasewait|index\.cgi|initial\.cgi|navigation|noframes)/, readdir(DIR))));
+    closedir (DIR);
+
+    my $panel;
+    foreach $panel (@panels)
+    {
+        $panelshash{$panel} = "Unknown";
+
+        unless (open (RD, "/etc/e-smith/web/functions/$panel"))
+        {
+            warn "Can't open file /etc/e-smith/web/functions/$panel: $!\n";
+            next;
+        }
+
+        while (<RD>)
+        {
+            if (/^\s*#\s*description\s*:\s*(.+?)\s*$/)
+            {
+                $panelshash{$panel} = $1;
+            }
+
+            last if ( $panelshash{$panel} ne "Unknown" );
+        }
+        close RD;
+    }
+
+    my $userAdminPanels = db_get_prop(\%accounts, $user, 'AdminPanels');
+    $userAdminPanels = '' if ! defined ($userAdminPanels);
+    @selected = split (/,/, $userAdminPanels);
+
+    my $globalAdminPanels = db_get_prop(\%accounts, 'globalUP', 'AdminPanels');
+    $globalAdminPanels = '' if ! defined ($globalAdminPanels);
+    @globalselected = split (/,/, $globalAdminPanels);
+
+    @panels = sort @panels;
+    my $count = scalar @panels;
+
+    my $out = '';
+
+    if ($count > 0)
+    {
+    $out .= '<table border=1 cellspacing=1 cellpadding=4>';
+
+    $out .= $q->Tr ($q->td ('&nbsp;'),
+                esmith::cgi::genSmallCell ($q, $q->b ('Panel')),
+                esmith::cgi::genSmallCell ($q, $q->b ('Description')));
+
+    my $panel;
+    foreach $panel (@panels)
+    {
+        my $checked = "";
+        if (grep (/^$panel$/, @selected) || grep (/^$panel$/, @globalselected))
+        {
+          $checked = "checked";
+        }
+
+        if (grep (/^$panel$/, @globalselected) && ($user ne 'globalUP'))
+        {
+            $out .=
+            $q->Tr (
+                $q->td (
+                    "<input type=\"checkbox\""
+                    . " name=\"panelAccess\""
+                    . " $checked value=\"$panel\">"
+                    ),
+                    esmith::cgi::genSmallRedCell ($q, $panel),
+                    esmith::cgi::genSmallRedCell (
+                    $q, $panelshash{$panel} . ' (Global)'));
+        } else {
+            $out .=
+            $q->Tr (
+                $q->td (
+                    "<input type=\"checkbox\""
+                    . " name=\"panelAccess\""
+                    . " $checked value=\"$panel\">"
+                    ),
+                    esmith::cgi::genSmallCell ($q, $panel),
+                    esmith::cgi::genSmallCell (
+                    $q, $panelshash{$panel}));
+        }
+    }
+
+    $out .= '</table>';
+    }
+
+    return $out;
+}
+
+
+sub modifyAccess ($)
+{
+    my ($q) = @_;
+
+    esmith::cgi::genHeaderNonCacheable ($q, \%conf, 'Modify user-manager access');
+
+    print
+    $q->startform (-method => 'POST', -action => $q->url (-absolute => 1));
+
+    my $acct = $q->param ('acct');
+
+    my $username = '';
+    if (db_get_type(\%accounts, $acct) eq "group")
+    {
+        $username =db_get_prop(\%accounts, $acct, "Description");
+    }
+    else
+    {
+        $username =db_get_prop(\%accounts, $acct, "FirstName")." ". db_get_prop(\%accounts, $acct, "LastName");
+    }
+
+    if (db_get(\%accounts, $acct))
+    {
+
+       print $q->table ({border => 0, cellspacing => 0, cellpadding => 4},
+
+            $q->Tr (esmith::cgi::genCell ($q, "Account name:"),
+                esmith::cgi::genCell ($q, $acct)),
+
+            $q->Tr (esmith::cgi::genCell ($q, "Name/Description:"),
+                esmith::cgi::genCell ($q, "$username")),
+
+            $q->Tr (esmith::cgi::genCell ($q, "Accessible Panels:"),
+                esmith::cgi::genCell ($q, genPanels ($q, $acct))),
+
+            esmith::cgi::genButtonRow ($q,
+                                   $q->submit (-name => 'action',
+                                               -value => 'Modify')));
+
+       print $q->hidden (-name => 'acct',
+              -override => 1,
+              -default => $acct);
+
+       print $q->hidden (-name => 'state',
+              -override => 1,
+              -default => 'performModifyAccess');
+
+    }
+
+    print $q->endform;
+    esmith::cgi::genFooter ($q);
+    return;
+}
+
+
+sub performModifyAccess ($)
+{
+    my ($q) = @_;
+    my $acct = $q->param ('acct');
+
+    my @adminPanels = $q->param ('panelAccess');
+    my @userPanels = ();
+
+    my $globalAdminPanels = db_get_prop(\%accounts, 'globalUP', 'AdminPanels');
+    $globalAdminPanels = '' if ! defined ($globalAdminPanels);
+    my @globalselected = split (/,/, $globalAdminPanels);
+
+    foreach my $panel (@adminPanels)
+    {
+        if ( ! grep (/^$panel$/, @globalselected) || ($acct eq 'globalUP'))
+        {
+            push(@userPanels, $panel);
+        }
+    }
+
+    my $adminPanels = join (',', @userPanels);
+
+    db_set_prop(\%accounts, $acct, 'AdminPanels', $adminPanels);
+
+    system ("/sbin/e-smith/signal-event", "conf-userpanel") == 0
+       or die ("Error occurred while updating userpanel configuration.\n");
+
+    showInitial ($q, "Successfully modified user account $acct.");
+}

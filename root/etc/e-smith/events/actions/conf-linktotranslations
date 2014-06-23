@@ -1,0 +1,8 @@
+#!/bin/bash
+trad=`ls /etc/e-smith/locale/`
+for lang in $trad
+do
+/bin/mkdir -p /etc/e-smith/locale/$lang/etc/e-smith/web/panels/user
+/bin/ln -sf /etc/e-smith/locale/$lang/etc/e-smith/web/functions /etc/e-smith/locale/$lang/etc/e-smith/web/panels/user/cgi-bin
+done
+

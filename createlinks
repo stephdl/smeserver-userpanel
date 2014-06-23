@@ -1,0 +1,25 @@
+#!/usr/bin/perl -w
+
+use esmith::Build::CreateLinks qw(:all);
+use File::Basename;
+use File::Path;
+
+##link to panel
+panel_link("userpanelaccess", "manager");
+
+##actions conf-userpanelsymlinks
+ for my $event (qw( conf-userpanel  bootstrap-console-save console-save post-upgrade remoteaccess-update   )){
+event_link("conf-userpanelsymlinks", $event, "70");}
+
+##actions link to translations
+ for my $event (qw( conf-userpanel  bootstrap-console-save console-save post-upgrade remoteaccess-update   )){
+event_link("conf-linktotranslations", $event, "70");}
+
+##event conf-userpanel
+my $event = "conf-userpanel";
+safe_symlink("sigusr1", "root/etc/e-smith/events/$event/services2adjust/httpd-admin");
+safe_symlink("sigusr1", "root/etc/e-smith/events/$event/services2adjust/httpd-e-smith");
+templates2events( "/etc/httpd/conf/httpd.conf",$event);
+templates2events( "/etc/httpd/admin-conf/httpd.conf",$event);
+
+

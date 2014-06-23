@@ -1,0 +1,9 @@
+
+# Aliases for the e-smith-user panel:
+
+    ScriptAlias /user-manager/cgi-bin /etc/e-smith/web/panels/user/cgi-bin
+    Alias /user-manager /etc/e-smith/web/panels/user/html
+
+    ScriptAlias /user/cgi-bin /etc/e-smith/web/panels/user/cgi-bin
+    Alias /user /etc/e-smith/web/panels/user/html
+

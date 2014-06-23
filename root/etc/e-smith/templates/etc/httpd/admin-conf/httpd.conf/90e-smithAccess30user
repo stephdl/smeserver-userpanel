@@ -1,0 +1,94 @@
+
+#------------------------------------------------------------
+# e-smith-user panel
+#------------------------------------------------------------
+{
+    use esmith::db;
+
+    my %accounts;
+    tie %accounts, 'esmith::config', '/home/e-smith/db/accounts';
+
+    my %panelshash;
+    opendir (DIR, "/etc/e-smith/web/panels/user/cgi-bin")
+        || die "Can't open /etc/e-smith/web/panels/user/cgi-bin directory.\n";
+
+    my @files = sort (grep (!/(^\.\.?$)|(^pleasewait$)|(^userpanel-[a-z][\-\_a-z0-9]*)/, readdir(DIR)));
+
+    closedir (DIR);
+
+    my $globalpanels = db_get_prop(\%accounts, 'globalUP', 'AdminPanels');
+    $globalpanels = '' if ( ! defined ($globalpanels) );
+    my @globalpanels = split (/,/, $globalpanels, -1);
+
+    my $key;
+    my $value;
+    my $require = "require user ";
+    while (($key,$value) = each %accounts)
+    {
+        my ($type, %properties) = split (/\|/, $value, -1);
+        if ($type eq 'user')
+        {
+            # Build the all-users require line:
+            $require .= " $key";
+
+            foreach $file (@files)
+            {
+                next if ($globalpanels && grep (/^$file$/, @globalpanels));
+
+                my $adminpanels = db_get_prop(\%accounts, $key, 'AdminPanels');
+                if ( defined $adminpanels )
+                {
+                    my @adminpanels = split (/,/, $adminpanels, -1);
+                    if (grep (/^$file$/, @adminpanels))
+                    {
+                        # Build a files require line for each panel
+                        $panelshash{$file} .= " $key"
+                    }
+                }
+            }
+        }
+    }
+
+    $OUT .= <<HERE;
+<Directory \"/etc/e-smith/web/panels/user/html\" >
+    Options Includes Indexes FollowSymLinks
+    AllowOverride None
+    order deny,allow
+    deny from all
+    allow from $localAccess
+    AuthName "SME User manager"
+    AuthType Basic
+    TKTAuthLoginURL /server-common/cgi-bin/login
+    require valid-user
+    SetEnv IMGHDR_SRC \"/e-smith-common/server-manager.jpg\"
+    Satisfy all
+</Directory>
+
+<Directory \"/etc/e-smith/web/panels/user/cgi-bin\" >
+    Options Includes Indexes FollowSymLinks
+    AllowOverride None
+    order deny,allow
+    deny from all
+    allow from $localAccess
+    AuthName "SME User Manager"
+    AuthType Basic
+    TKTAuthLoginURL /server-common/cgi-bin/login
+    require valid-user
+    SetEnv IMGHDR_SRC \"/e-smith-common/server-manager.jpg\"
+    Satisfy all
+HERE
+
+    foreach $file (@files)
+    {
+        next unless ( defined ($panelshash{$file}) );
+        $OUT .= "\n";
+        $OUT .= "    <Files $file>\n";
+        $OUT .= "        AuthName \"SME User manager\"\n";
+        $OUT .= "        AuthType Basic\n";
+        $OUT .= "        TKTAuthLoginURL /server-common/cgi-bin/login\n";
+        $OUT .= "        require user admin$panelshash{$file}\n";
+        $OUT .= "    </Files>\n";
+    }
+
+    $OUT .= "</Directory>\n";
+}

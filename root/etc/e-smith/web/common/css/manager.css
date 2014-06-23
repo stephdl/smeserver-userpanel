@@ -1,0 +1,310 @@
+/*------------------------------------------------------------
+ * Default properties
+ *------------------------------------------------------------*/
+
+body
+{
+  background: 		#ffffff;
+  color: 		#000000;
+  font-family: 		verdana,arial,helvetica,sans-serif;
+  font-size:		10pt;
+  border-width: 	0
+}
+
+/* Netscape 4 needs these basic settings in order to render default font properly */
+p
+{
+  color:		#000000;
+  font-family:		verdana,arial,helvetica,sans-serif;
+}
+
+table td
+{
+  color: 		#000000;
+  font-family: 		verdana,arial,helvetica,sans-serif;
+  font-size:		10pt;
+}
+
+td {
+  font-family:		verdana,arial,helvetica,sans-serif;
+  font-size:		10pt;
+}
+table td div {
+  background: 		transparent;
+  font-size:		10pt;
+}
+
+p.notsmall {
+  font-size:		10pt;
+}
+
+/* End Netscape-isms (for the moment <sigh>) */
+
+.centerit
+{
+  text-align:		center;
+}
+
+div
+{
+  margin-top:		10px;
+  margin-bottom:	10px;
+}
+
+.highlight
+{
+  background: #ffc61e;
+}
+
+.subheading
+{
+  background:		#ffffff;
+  color:		#1e385b;
+}
+/*------------------------------------------------------------
+ * Properties for headings
+ *------------------------------------------------------------*/
+
+
+h1
+{
+  font-family: 		verdana,helvetica,arial,sans-serif;
+  color: 		#000099
+}
+
+h2
+{
+  font-family: 		verdana,helvetica,arial,sans-serif;
+  color: 		#000099
+}
+
+h3
+{
+  font-family: 		verdana,helvetica,arial,sans-serif;
+  color: 		#000099
+}
+
+h4
+{
+  font-family: 		verdana,helvetica,arial,sans-serif;
+  font-style: 		italic
+}
+
+/*------------------------------------------------------------
+ * Properties for lists
+ *------------------------------------------------------------*/
+
+ul
+{
+  font-family: 		arial,helvetica,sans-serif;
+  list-style-type: 	square;
+
+}
+
+ol {
+  font-family:		arial,helvetica,sans-serif;
+  font-size:		80%;
+  color:		#1e385b;
+}
+
+/*------------------------------------------------------------
+ * Properties for list items
+ *------------------------------------------------------------*/
+
+ol ul li
+{
+  font-family: 		arial,helvetica,sans-serif;
+  font-size:		80%;
+  font-weight:		normal;
+  color:		#000000;
+}
+
+
+/*------------------------------------------------------------
+ * Properties for tables
+ *------------------------------------------------------------*/
+
+/* Removed -- see default table font above... */
+/* td
+{
+  font-family: 		Times
+}
+*/
+
+table
+{
+  margin-top:		0px;
+  margin-bottom:	0px;
+  margin-left:		0px;
+  margin-right:		0px;
+}
+/* left margin and center [sic] table classes */
+
+.banner
+{
+  background:		#000000;
+  color:		#ffffff;
+}
+
+.banner-right
+{
+  font-family:		arial,helvetica,sans-serif;
+  background:		#e17200;
+  color:		#ffffff;
+}
+
+.border
+{
+  background:		#000000;
+  color:		#000000;
+  border-color:		#000000;
+}
+.sidebar
+{
+  width:		200px;
+  background:		#ffffff;
+  font-size: 		smaller;
+  font:			arial,helvetica,sans-serif;
+  font-weight:		normal;
+}
+
+.sidebar-title
+{
+  background:		#1e385b;
+  color:		#ffffff;
+  font:			arial,helvetica,sans-serif;
+  font-weight:		bold;
+}
+
+.newsitem
+{
+  background:		#ffffff;
+  font-color:		#000000;
+  font:			arial,helvetica,sans-serif;
+  margin-left:		5px;
+  margin-right:		5px;
+  margin-top:		5px;
+  margin-bottom:	5px;
+}
+
+.newsitem-title
+{
+  background:		#cccccc;
+  font-color:		#ffffff;
+  font:			arial,helvetica,sans-serif;
+  font-weight:		bold;
+}
+
+.newsitem-footer
+{
+  background:		#cccccc;
+  color:		#000000;
+  font:			arial,helvetica,sans-serif;
+  font-size:		smaller;
+  text-align:		right;
+}
+
+.newsitem-detail
+{
+  font-size:		smaller;
+  font-weight:		normal;
+}
+
+.formlabel
+{
+  background:		#c0c0c0;
+  color:		#000000;
+  font:			arial,helvetica,sans-serif;
+  font-size:		small;
+  font-weight:		bold;
+  text-align:		right;
+}
+
+
+/*------------------------------------------------------------
+ * Properties for title tables
+ *------------------------------------------------------------*/
+
+th
+{
+  /* font-family: Helvetica,Arial; */
+  background: 		#F7E0B5;
+  color: 		#000000
+}
+
+/*------------------------------------------------------------
+ * Properties for the copyright notice on the bottom
+ *------------------------------------------------------------*/
+
+.copyright
+{
+  font-family: 		Times;
+  font-size: 		smaller
+}
+
+/*------------------------------------------------------------
+ * Properties for the clickable links
+ *------------------------------------------------------------*/
+
+/* Netscape 4 can't use these. Default ANCHOR setting follows... */
+a:link, A:visited, A:active
+{
+  color: 		#00008b
+}
+
+a
+{
+  color:		#00008b;
+}
+
+/* link styles for index.php3 (i.e. welcome page) */
+.welcome-link
+{
+  background:		#ffffff;
+  color:		#1e385b;
+}
+
+/*------------------------------------------------------------
+ * Properties for the littlelinks
+ *------------------------------------------------------------*/
+
+.littlelink
+{
+  font-family: helvetica,arial,sans-serif;
+}
+
+/*------------------------------------------------------------
+ * Style for positioning text
+ *------------------------------------------------------------*/
+
+#textlayer
+{
+  position: absolute;
+  visibility: inherit;
+  top: 160px;
+  left: 50px;
+  z-index: 2
+}
+
+/*------------------------------------------------------------
+ * Style for bold paragraph text
+ *------------------------------------------------------------*/
+
+#para
+{
+  font-family: helvetica,arial,sans-serif;
+  font-weight: bold;
+  color: #000000
+}
+
+/*------------------------------------------------------------
+ *
+ *------------------------------------------------------------*/
+
+#title
+{
+  font-family: helvetica,arial,sans-serif;
+  font-weight: bold;
+  padding: 7px 7px 7px 7px;
+  color: #ffffff
+}
