@@ -57,7 +57,7 @@
     deny from all
     allow from $localAccess
     AuthName "SME User manager"
-    AuthBasicProvider external
+#    AuthBasicProvider external
     AuthType Basic
     TKTAuthLoginURL /server-common/cgi-bin/login
     require valid-user
@@ -72,7 +72,7 @@
     deny from all
     allow from $localAccess
     AuthName "SME User Manager"
-    AuthBasicProvider external
+ #   AuthBasicProvider external
     AuthType Basic
     TKTAuthLoginURL /server-common/cgi-bin/login
     require valid-user
@@ -86,7 +86,7 @@ HERE
         $OUT .= "\n";
         $OUT .= "    <Files $file>\n";
         $OUT .= "        AuthName \"SME User manager\"\n";
-        $OUT .= "        AuthBasicProvider external\n";
+ #       $OUT .= "        AuthBasicProvider external\n";
         $OUT .= "        AuthType Basic\n";
         $OUT .= "        TKTAuthLoginURL /server-common/cgi-bin/login\n";
         $OUT .= "        require user admin$panelshash{$file}\n";
