@@ -5,17 +5,17 @@
 Summary: Provide a user panel to let users to change delegated server settings.
 %define name smeserver-userpanel
 Name: %{name}
-%define version 0.9
-%define release 16
+%define version 1.1
+%define release 1
 Version: %{version}
 Release: %{release}%{?dist}
 License: GPL
-URL: http://www.dungog.net/sme
+URL: http://wiki.contribs.org
 Group: SMEserver/addon
 Source: %{name}-%{version}.tar.gz
 BuildArchitectures: noarch
 BuildRoot: /var/tmp/%{name}-%{version}
-Requires: e-smith-release >= 7.1.1
+Requires: e-smith-release >= 9
 BuildRequires: e-smith-devtools
 Obsoletes: e-smith-userpanel
 AutoReqProv: no
@@ -29,6 +29,9 @@ userpanels available in seperate rpms.
 Panels can be delegated at user, group or global levels
 
 %changelog
+* Mon Jun 23 2014 stephane de Labrusse <stephdl@de-labrusse.fr> 1.1-1.sme
+- Initial release to sme9
+
 * Sun Dec 15 2013 JP Pialasse <tests@pialasse.com>  0.9-16.sme
 - move post to an action event [SME: 8032]
 
