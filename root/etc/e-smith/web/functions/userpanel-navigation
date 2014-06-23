@@ -37,6 +37,7 @@ use esmith::db;
 
 sub determineGroup;
 sub showNavigation ($);
+sub logmeout($);
 sub byweight;
 
 BEGIN
