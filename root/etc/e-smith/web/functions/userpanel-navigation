@@ -36,8 +36,8 @@ use esmith::I18N;
 use esmith::db;
 
 sub determineGroup;
-sub showNavigation ($);
-sub logmeout($);
+sub showNavigation;
+sub logmeout;
 sub byweight;
 
 BEGIN
@@ -75,7 +75,7 @@ exit (0);
 #------------------------------------------------------
 # subroutine to print logout
 #------------------------------------------------------
-sub logmeout ($)
+sub logmeout
 {
 my $user = $ENV{'REMOTE_USER'};
 
@@ -134,7 +134,7 @@ sub determineGroup
 # subroutine to display navigation bar
 #------------------------------------------------------------
 
-sub showNavigation ($)
+sub showNavigation
 {
     my $q = shift;
 

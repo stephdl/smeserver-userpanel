@@ -6,7 +6,7 @@ Summary: Provide a user panel to let users to change delegated server settings.
 %define name smeserver-userpanel
 Name: %{name}
 %define version 1.1
-%define release 1
+%define release 2
 Version: %{version}
 Release: %{release}%{?dist}
 License: GPL
@@ -29,6 +29,10 @@ userpanels available in seperate rpms.
 Panels can be delegated at user, group or global levels
 
 %changelog
+* Tue Aug 19 2014 stephane de Labrusse <stephdl@de-labrusse.fr> 1.1-2.sme
+- corrected a prototype called too early [SME:8534]
+- removed all prototypes of file userpanel-navigation
+
 * Mon Jun 23 2014 stephane de Labrusse <stephdl@de-labrusse.fr> 1.1-1.sme
 - Initial release to sme9
 
